@@ -110,6 +110,3 @@ app.post("/getmotivation",authmiddleware,async (req,res)=>{
 
 })
 
-app.use((req,res)=>{
-    res.json(404).json("Route doesn't exist")
-})
