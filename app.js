@@ -107,9 +107,11 @@ try {
 })
 
 app.post("/getmotivation",authmiddleware,async (req,res)=>{
-
+// considering whether get motivation should be a post request
 })
 
 app.use((req,res)=>{
     res.json(404).json("Route doesn't exist")
 })
+
+//check pimit for documentations
