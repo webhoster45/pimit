@@ -5,7 +5,8 @@ const mongoose=require('mongoose');
 const JWT_SECRET=process.env.JWT_SECRET;
 const PORT=process.env.PORT||5000;
 const Schema=mongoose.Schema;
-
+const bcrypt=require('bcrypt')
+const jwt=require("jsonwebtoken")
 
 const app=express();
 
@@ -55,15 +56,17 @@ try {
     let ip; 
     if(!username||!password) return res.status(400).json({message:"Invalid credentials"});
     const finduser=await User.findOne({username:validatename});
-    if(!finduser) return res.status(400).json({message:"User already exists"})
-    const hashedpassword=await bycrpt.hash(password,10);
+    if(finduser) return res.status(400).json({message:"User already exists"})
+    const hashedpassword=await bcrypt.hash(password,10);
     const token=jwt.sign({username},JWT_SECRET);
     await User.create({username:username,password:hashedpassword,email})
     return res.status(200).json({message:`User: ${username} created successfully`,token});
 
 
-} catch (error) {
+} catch (err) {
+       console.log(err)
     return res.status(500).json({message:err})
+ 
 }
 })
 
@@ -75,7 +78,7 @@ try {
     const user=await User.findOne({username:validatename});
     if(!user) return res.status(400).json({message:"User doesn't exist"});
 
-    const compare=await bycrpt.compare(password,user.password);
+    const compare=await bcrypt.compare(password,user.password);
     if(!compare) return res.status(400).json({message:"invalid credentials"});
     const token=jwt.sign({username:validatename,id:user._id},JWT_SECRET);
     res.status(200).json({message:`${username} logged in successfully`,token})
