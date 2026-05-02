@@ -7,6 +7,8 @@ const PORT=process.env.PORT||5000;
 const Schema=mongoose.Schema;
 const bcrypt=require('bcrypt')
 const jwt=require("jsonwebtoken")
+const {rateLimit, ipKeyGenerator}=require('express-rate-limit');
+
 
 const app=express();
 
@@ -19,19 +21,43 @@ const userschema=new Schema({
 const motiveschema=new Schema({
     content:{type: String, required: true},
     source:{type: String, required:true}
-},{timestamps:true})
+},{timestamps:true});
+
+const apischema=new Schema({
+    key :{type:String , required: true},
+    owner:{type:String,required:true },
+    requestsmade:{type:String, required:true},
+    resettime:{type:String , required:true},
+    limit:{}
+})
 
 const Motive=mongoose.model("Motive",motiveschema);
 const User=mongoose.model("User",userschema)
 
 app.use(express.json());
-app.use(express.urlencoded({extended:true}))
+app.use(express.urlencoded({extended:true}));
+app.use(rateLimit({message:{error:"Too many requests"}}));
+app.set("proxy",1);
+
 
 mongoose.connect(process.env.MONGODB_URL)
 .then(()=>{console.log("MongoDB connected"),app.listen(PORT,()=>{console.log(`App running on PORT: ${PORT}`)})})
 .catch((err)=>console.log(err));
 
-//------------------------------UNTESTED CODE---------------------------------
+const limiter = rateLimit({
+	windowMs: 15 * 60 * 1000, // 15 minutes
+	limit: 3, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+	standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+	legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+	ipv6Subnet: 56, // Set to 60 or 64 to be less aggressive, or 52 or 48 to be more aggressive
+    keygenerator:(req,res)=>{
+        // ipKeyGenerator(req.ip)
+        if(userIsAuthenticate(req)){
+            return req.userId||req.username
+        }
+        return ipKeyGenerator(req.ip,60)
+    }
+})
 
 function authmiddleware(req,res,next){
 try {
@@ -97,24 +123,29 @@ try {
     if(!motivations) return res.status(400).json({message:"Nothing to be added"})
     motivations.forEach(async m=> {
      const existingcontent=await Motive.findOne({content:m.content});
-     if(existingcontent)  console.log(`${existingcontent} already exists in the db , skipping`);
+     if(existingcontent)  console.log(`"${existingcontent}" already exists in the db , skipping`);
      else{
         await Motive.create({content:m.content,source:m.source});
-        return res.status(200).json({message:"DB populated"})
+        
      }
-    });
+    })
+    return res.status(200).json({message:"DB populated"})
     
 } catch (error) {
     return res.status(400).json({message:error})
 }
 })
 
-app.post("/getmotivation",authmiddleware,async (req,res)=>{
+app.get("/motivation",authmiddleware,limiter,async (req,res)=>{
 // considering whether get motivation should be a post request
+const motivations=await Motive.find();
+if(!motivations) return res.status(400).json({message:"No motivations"});
+console.log(req.ip)
+return res.status(200).json({motivations})
 })
 
 app.use((req,res)=>{
-    res.json(404).json("Route doesn't exist")
+    return res.status(404).json("Route doesn't exist")
 })
 
 //check pimit for documentations
