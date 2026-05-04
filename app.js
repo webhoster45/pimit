@@ -7,8 +7,8 @@ const PORT=process.env.PORT||5000;
 const Schema=mongoose.Schema;
 const bcrypt=require('bcrypt')
 const jwt=require("jsonwebtoken")
-const {rateLimit, ipKeyGenerator}=require('express-rate-limit');
-
+const {rateLimit}=require('express-rate-limit');
+const crypto=require('crypto');
 
 const app=express();
 
@@ -50,13 +50,13 @@ const limiter = rateLimit({
 	standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
 	legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 	ipv6Subnet: 56, // Set to 60 or 64 to be less aggressive, or 52 or 48 to be more aggressive
-    keygenerator:(req,res)=>{
-        // ipKeyGenerator(req.ip)
-        if(userIsAuthenticate(req)){
-            return req.userId||req.username
-        }
-        return ipKeyGenerator(req.ip,60)
-    }
+    // keygenerator:(req,res)=>{
+    //     // ipKeyGenerator(req.ip)
+    //     if(userIsAuthenticate(req)){
+    //         return req.userId||req.username
+    //     }
+    //     return ipKeyGenerator(req.ip,60)
+    // }
 })
 
 function authmiddleware(req,res,next){
