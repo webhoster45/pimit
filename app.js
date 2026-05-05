@@ -8,8 +8,7 @@ const Schema=mongoose.Schema;
 const bcrypt=require('bcrypt')
 const jwt=require("jsonwebtoken")
 const {rateLimit}=require('express-rate-limit');
-const crypto=require('crypto');
-
+const crypto=require('crypto')
 const app=express();
 
 
@@ -32,7 +31,8 @@ const apischema=new Schema({
 })
 
 const Motive=mongoose.model("Motive",motiveschema);
-const User=mongoose.model("User",userschema)
+const User=mongoose.model("User",userschema);
+const Api=mongoose.model("Api",apischema)
 
 app.use(express.json());
 app.use(express.urlencoded({extended:true}));
@@ -57,6 +57,7 @@ const limiter = rateLimit({
     //     }
     //     return ipKeyGenerator(req.ip,60)
     // }
+    // keyGenerator
 })
 
 function authmiddleware(req,res,next){
@@ -79,13 +80,24 @@ app.post('/register',async(req,res)=>{
 try {
         const {username,password,email}=req.body;
         const validatename=username.trim().toLowerCase();
+        const apikey=crypto.randomBytes(16).toString('hex');
     let ip; 
     if(!username||!password) return res.status(400).json({message:"Invalid credentials"});
     const finduser=await User.findOne({username:validatename});
-    if(finduser) return res.status(400).json({message:"User already exists"})
+    const checkfornoduplicate=await Api.findOne({key:apikey})
+    if(checkfornoduplicate){
+    apikey=crypto.randomBytes(16).toString("hex");
+    }
+    if(finduser) return res.status(400).json({message:"User already exists"});
+
+    // if()
     const hashedpassword=await bcrypt.hash(password,10);
-    const token=jwt.sign({username},JWT_SECRET);
-    await User.create({username:username,password:hashedpassword,email})
+    const token=jwt.sign({username,apikey},JWT_SECRET);
+    await User.create({username:username,password:hashedpassword,email});
+    await Api.create({key:apikey,owner:validatename,requestsmade:0,resettime:0})
+    //     requestsmade:{type:String, required:true},
+    // resettime:{type:String , required:true},
+    // limit:{}
     return res.status(200).json({message:`User: ${username} created successfully`,token});
 
 
