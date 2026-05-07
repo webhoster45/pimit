@@ -25,9 +25,9 @@ const motiveschema=new Schema({
 const apischema=new Schema({
     key :{type:String , required: true},
     owner:{type:String,required:true },
-    requestsmade:{type:String, required:true},
-    resettime:{type:String , required:true},
-    limit:{}
+    requestsmade:{type:Number, required:true},
+    resettime:{type:Number},
+    limit:{type:Number,required:true}
 })
 
 const Motive=mongoose.model("Motive",motiveschema);
@@ -36,7 +36,7 @@ const Api=mongoose.model("Api",apischema)
 
 app.use(express.json());
 app.use(express.urlencoded({extended:true}));
-app.use(rateLimit({message:{error:"Too many requests"}}));
+// app.use(rateLimit({message:{error:"Too many requests"}}));
 app.set("proxy",1);
 
 
@@ -44,21 +44,37 @@ mongoose.connect(process.env.MONGODB_URL)
 .then(()=>{console.log("MongoDB connected"),app.listen(PORT,()=>{console.log(`App running on PORT: ${PORT}`)})})
 .catch((err)=>console.log(err));
 
-const limiter = rateLimit({
+const limiter =rateLimit({
 	windowMs: 15 * 60 * 1000, // 15 minutes
-	limit: 3, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
-	standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-	legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-	ipv6Subnet: 56, // Set to 60 or 64 to be less aggressive, or 52 or 48 to be more aggressive
-    // keygenerator:(req,res)=>{
-    //     // ipKeyGenerator(req.ip)
-    //     if(userIsAuthenticate(req)){
-    //         return req.userId||req.username
-    //     }
-    //     return ipKeyGenerator(req.ip,60)
-    // }
-    // keyGenerator
+
+    max:async (req,res)=>{
+        const key=req.headers['x-api-key'];
+        if(!key) return res.status(401).json({message:"Error, Check Api key"})
+        const apikey=await Api.findOne({key});
+        if(!apikey) return res.status(400).json({message:"Error ,Check Api key"})
+        return apikey?.limit||2;
+        const now=new Date();
+        const limited=now.setMinutes(now.getMinutes()+windowMs)
+        apikey.resettime=limited
+        res.save()
+    },
+    keyGenerator:(req,res)=>{
+        return req.headers['x-api-key'];
+    },
+    message:{error:'Too many requests , API key exceeded'},
+    standardHeaders:true,
+    legacyHeaders:false
 })
+
+const trackinglogic=async (req,res)=>{
+        const key=req.headers['x-api-key'];
+        if(!key) return res.status(401).json({message:"Error, Check Api key"})
+        const apikey=await Api.findOne({key});
+        if(!apikey) return res.status(400).json({message:"Error ,Check Api key"})
+            apikey.requestsmade+=1;
+        apikey.limit-=1;
+res.save()
+}
 
 function authmiddleware(req,res,next){
 try {
@@ -94,12 +110,16 @@ try {
     const hashedpassword=await bcrypt.hash(password,10);
     const token=jwt.sign({username,apikey},JWT_SECRET);
     await User.create({username:username,password:hashedpassword,email});
-    await Api.create({key:apikey,owner:validatename,requestsmade:0,resettime:0})
-    //     requestsmade:{type:String, required:true},
-    // resettime:{type:String , required:true},
-    // limit:{}
+    await Api.create({key:apikey,owner:validatename,requestsmade:0,resettime:15 * 60 * 1000,limit:3})
+
     return res.status(200).json({message:`User: ${username} created successfully`,token});
 
+
+    //     key :{type:String , required: true},
+    // owner:{type:String,required:true },
+    // requestsmade:{type:String, required:true},
+    // resettime:{type:String , required:true},
+    // limit:{}
 
 } catch (err) {
        console.log(err)
@@ -114,6 +134,7 @@ try {
     const validatename=username.trim().toLowerCase();
     if(!username||!password) return res.status(400).json({message:"All params must be valid"})
     const user=await User.findOne({username:validatename});
+    const apikeysource=await Api.findone({owner:validatename})
     if(!user) return res.status(400).json({message:"User doesn't exist"});
 
     const compare=await bcrypt.compare(password,user.password);
@@ -148,7 +169,12 @@ try {
 }
 })
 
-app.get("/motivation",authmiddleware,limiter,async (req,res)=>{
+app.get('/check',authmiddleware,(req,res)=>{
+console.log(req.user)
+res.end()
+})
+
+app.get("/motivation",authmiddleware,limiter,trackinglogic,async (req,res,next)=>{
 // considering whether get motivation should be a post request
 const motivations=await Motive.find();
 if(!motivations) return res.status(400).json({message:"No motivations"});
@@ -161,3 +187,16 @@ app.use((req,res)=>{
 })
 
 //check pimit for documentations
+//Extra jagons
+	//limit: 3, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+	//standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+	//legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+	// ipv6Subnet: 56, // Set to 60 or 64 to be less aggressive, or 52 or 48 to be more aggressive
+    // keygenerator:(req,res)=>{
+    //     // ipKeyGenerator(req.ip)
+    //     if(userIsAuthenticate(req)){
+    //         return req.userId||req.username
+    //     }
+    //     return ipKeyGenerator(req.ip,60)
+    // }
+    // keyGenerator
